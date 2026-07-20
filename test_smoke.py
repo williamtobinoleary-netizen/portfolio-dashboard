@@ -2,6 +2,13 @@ import traceback
 from utils.portfolio import load_portfolio, download_prices, get_latest_prices
 from utils.metrics import position_values
 
+
+def test_duplicate_tickers_are_aggregated():
+    df = load_portfolio("portfolio.csv")
+    assert 'TSLA' in df['Ticker'].tolist()
+    assert df.loc[df['Ticker'] == 'TSLA', 'Shares'].iloc[0] == 12.0
+
+
 def run_smoke():
     try:
         print("Loading portfolio.csv...")
@@ -25,5 +32,7 @@ def run_smoke():
         print("Smoke test failed:")
         traceback.print_exc()
 
+
 if __name__ == '__main__':
+    test_duplicate_tickers_are_aggregated()
     run_smoke()

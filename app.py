@@ -9,6 +9,11 @@ st.title("Mini LSEG Portfolio Analytics Terminal")
 
 st.sidebar.header("Settings")
 period = st.sidebar.selectbox("Price history", ["1y", "6mo", "3mo"], index=0)
+refresh_clicked = st.sidebar.button("Refresh dashboard")
+st.sidebar.caption("Edit portfolio.csv and press Refresh dashboard to update the view.")
+
+if refresh_clicked:
+    st.rerun()
 
 st.header("Portfolio")
 try:
@@ -25,9 +30,11 @@ with st.spinner("Downloading market data..."):
 latest = get_latest_prices(prices)
 
 df_vals, total = position_values(df, latest)
+total_shares = int(df['Shares'].sum())
 
 st.subheader("Summary")
 st.metric("Total portfolio value (approx)", f"£{total:,.2f}")
+st.metric("Total shares", total_shares)
 
 st.subheader("Holdings")
 st.table(df_vals)

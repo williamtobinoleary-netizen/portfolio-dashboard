@@ -1,23 +1,51 @@
 # Mini LSEG Portfolio Analytics Terminal
 
-Quick start for beginners.
+A simple portfolio analytics dashboard built with Python, Streamlit and Plotly.
 
-Prerequisites
+## What this project does
+
+This app reads a portfolio from a CSV file, downloads recent market data, and shows:
+- the total portfolio value
+- the total number of shares held
+- a holdings table with prices and values
+- an allocation pie chart
+- basic performance metrics for each ticker
+
+It is designed as a beginner-friendly project for learning Python, pandas, financial calculations and simple web dashboards.
+
+## Prerequisites
+
 - Python 3.12+
+- Git
+- A terminal such as PowerShell or Command Prompt
 
-Create a virtual environment and install dependencies:
+## Setup
+
+Create and activate a virtual environment:
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate   # macOS / Linux
-.venv\Scripts\Activate.ps1 # Windows (PowerShell)
+.venv\Scripts\Activate.ps1
+```
+
+Install the dependencies:
+
+```bash
 pip install -r requirements.txt
 ```
 
-Run the app locally:
+## Run the app
 
 ```bash
 streamlit run app.py
 ```
 
-If `yfinance` fails (network or rate limits), the app will show which tickers couldn't be downloaded.
+Then open the local URL shown in the terminal, usually http://localhost:8501/.
+
+## Portfolio file
+
+The app reads [portfolio.csv](portfolio.csv). You can change the tickers and share counts there to test different portfolios.
+
+## Notes
+
+If market data cannot be downloaded, the app will still show the portfolio data and indicate which tickers had no price history.

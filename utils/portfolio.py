@@ -1,10 +1,14 @@
 import pandas as pd
 
+
 def load_portfolio(path="portfolio.csv"):
     """Load portfolio CSV with columns Ticker,Shares into a DataFrame."""
     df = pd.read_csv(path)
     df = df.dropna()
-    df['Shares'] = df['Shares'].astype(float)
+    df['Ticker'] = df['Ticker'].astype(str).str.strip()
+    df['Shares'] = pd.to_numeric(df['Shares'], errors='coerce').fillna(0.0)
+    df = df[df['Ticker'] != '']
+    df = df.groupby('Ticker', as_index=False)['Shares'].sum()
     return df
 
 def download_prices(tickers, period="1y"):
