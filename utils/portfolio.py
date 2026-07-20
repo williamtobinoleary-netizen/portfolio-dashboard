@@ -1,8 +1,16 @@
 import pandas as pd
+from pathlib import Path
+
+
+def number_rows_from_one(df):
+    """Return a dataframe with a 1-based index for display."""
+    return df.reset_index(drop=True).set_index(pd.Index(range(1, len(df) + 1)))
 
 
 def load_portfolio(path="portfolio.csv"):
     """Load portfolio CSV with columns Ticker,Shares into a DataFrame."""
+    if isinstance(path, (str, Path)):
+        path = str(path)
     df = pd.read_csv(path)
     df = df.dropna()
     df['Ticker'] = df['Ticker'].astype(str).str.strip()
@@ -10,6 +18,17 @@ def load_portfolio(path="portfolio.csv"):
     df = df[df['Ticker'] != '']
     df = df.groupby('Ticker', as_index=False)['Shares'].sum()
     return df
+
+
+def load_portfolio_from_upload(uploaded_file):
+    """Load portfolio data from an uploaded streamlit file object."""
+    if uploaded_file is None:
+        return None
+    try:
+        return load_portfolio(uploaded_file)
+    except Exception:
+        uploaded_file.seek(0)
+        return pd.read_csv(uploaded_file)
 
 def download_prices(tickers, period="1y"):
     """Download historical Close prices for a list of tickers using yfinance.

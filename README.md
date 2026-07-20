@@ -44,7 +44,7 @@ Then open the local URL shown in the terminal, usually http://localhost:8501/.
 
 ## Portfolio file
 
-The app reads [portfolio.csv](portfolio.csv). You can change the tickers and share counts there to test different portfolios.
+The app reads [portfolio.csv](portfolio.csv) by default, but you can also upload your own CSV through the sidebar to test different portfolios.
 
 ## Notes
 
