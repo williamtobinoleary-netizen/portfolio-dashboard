@@ -19,11 +19,14 @@ if number_rows_from_one is None:
 download_prices = portfolio_module.download_prices
 get_latest_prices = portfolio_module.get_latest_prices
 metrics_module = importlib.import_module("utils.metrics")
+metrics_module = importlib.reload(metrics_module)
 position_values = metrics_module.position_values
 daily_returns_from_prices = metrics_module.daily_returns_from_prices
 portfolio_volatility = metrics_module.portfolio_volatility
 sharpe_ratio = metrics_module.sharpe_ratio
 portfolio_return_from_prices = getattr(metrics_module, "portfolio_return_from_prices", None)
+portfolio_historical_performance = metrics_module.portfolio_historical_performance
+project_future_value = metrics_module.project_future_value
 
 if portfolio_return_from_prices is None:
     def portfolio_return_from_prices(price_dict):
@@ -444,6 +447,7 @@ for ticker, latest_price in latest.items():
 df_vals, total = position_values(df, latest)
 total_shares = int(df["Shares"].sum())
 returns = portfolio_return_from_prices(prices)
+historical_performance = portfolio_historical_performance(df, prices)
 largest_position = df_vals.sort_values("Value", ascending=False).iloc[0]
 if pd.notna(largest_position["Value"]):
     top_ticker = largest_position["Ticker"]
@@ -452,22 +456,53 @@ if pd.notna(largest_position["Value"]):
 else:
     top_ticker, top_value, top_weight = "N/A", 0, 0
 
-portfolio_return = None
-for ticker, value in returns.items():
-    if value is not None:
-        portfolio_return = value if portfolio_return is None else portfolio_return
+portfolio_return = (
+    historical_performance["total_return"] * 100
+    if historical_performance is not None
+    else None
+)
 
 st.markdown('<div class="section-kicker">Portfolio overview</div>', unsafe_allow_html=True)
 st.subheader("Summary")
 summary_columns = st.columns(5)
-summary_columns[0].metric("Total portfolio value", f"£{total:,.2f}")
-summary_columns[1].metric("Total shares", total_shares)
-summary_columns[2].metric("Top holding", top_ticker)
-summary_columns[3].metric("Top holding weight", f"{top_weight:.1f}%")
+summary_columns[0].metric(
+    "Total portfolio value",
+    f"£{total:,.2f}",
+    help="The latest available price of every holding multiplied by its share quantity, then added together. London quotes are converted from pence to pounds.",
+)
+summary_columns[1].metric(
+    "Total shares",
+    total_shares,
+    help="The combined number of shares across all holdings. This does not describe diversification because different shares have different prices.",
+)
+summary_columns[2].metric(
+    "Top holding",
+    top_ticker,
+    help="The company with the largest current monetary value in this portfolio.",
+)
+summary_columns[3].metric(
+    "Top holding weight",
+    f"{top_weight:.1f}%",
+    help="The percentage of total portfolio value concentrated in the largest holding. A high figure can indicate concentration risk.",
+)
 summary_columns[4].metric(
     "Portfolio return",
     f"{portfolio_return:.1f}%" if portfolio_return is not None else "N/A",
+    help="The estimated change in value across the selected price-history period, assuming today’s share quantities were held throughout. It covers the whole portfolio and excludes fees, taxes, dividends, and currency effects.",
 )
+
+with st.expander("How to read the portfolio summary"):
+    st.markdown(
+        """
+        **Portfolio return** compares the estimated starting and ending values of the complete portfolio over the selected price-history period. A positive result means its market value rose; a negative result means it fell.
+
+        **Annualized return** converts that performance into an equivalent yearly compound rate, making different time periods easier to compare. It is not a forecast.
+
+        **Holding weight** shows how much each company contributes to total value. Concentrated portfolios can move more sharply when their largest holdings change price.
+
+        Prices may be delayed. Calculations exclude trading fees, tax, dividends, inflation and, for portfolios mixing markets, currency movements.
+        """
+    )
 
 st.divider()
 holdings_column, allocation_column = st.columns([1.18, 0.82], gap="large")
@@ -502,9 +537,126 @@ with allocation_column:
 st.divider()
 st.markdown('<div class="section-kicker">Analytics workspace</div>', unsafe_allow_html=True)
 st.subheader("Portfolio analysis")
-simulation_tab, risk_tab, performance_tab = st.tabs(
-    ["Stock simulation", "Risk profile", "Performance examples"]
+projection_tab, simulation_tab, risk_tab, performance_tab = st.tabs(
+    ["Portfolio projection", "Stock simulation", "Risk profile", "Performance examples"]
 )
+
+with projection_tab:
+    st.subheader("Portfolio return and projection")
+    if historical_performance is None:
+        st.info("There is not enough price history to calculate a portfolio projection.")
+    else:
+        historical_cagr = historical_performance["annualized_return"]
+        controls_column, explanation_column = st.columns([1.15, 0.85], gap="large")
+        with controls_column:
+            projection_years = st.slider(
+                "Projection horizon (years)",
+                1,
+                30,
+                5,
+                help="How many years the compound-growth illustration should cover.",
+            )
+            default_rate = float(min(max(historical_cagr * 100, -20.0), 30.0))
+            assumed_return = st.slider(
+                "Assumed annual return",
+                -20.0,
+                30.0,
+                default_rate,
+                step=0.5,
+                format="%.1f%%",
+                help="The yearly growth assumption used in the projection. It defaults to the portfolio’s annualized historical rate but can be changed.",
+            )
+            monthly_contribution = st.number_input(
+                "Monthly contribution",
+                min_value=0.0,
+                value=0.0,
+                step=50.0,
+                help="An optional amount added at the end of every month.",
+            )
+            target_return = st.slider(
+                "Target annual return",
+                0.0,
+                20.0,
+                5.0,
+                step=0.5,
+                format="%.1f%%",
+                help="Your own comparison threshold. It is not a market benchmark or recommendation.",
+            )
+
+        assumed_rate = assumed_return / 100
+        projected_value = project_future_value(
+            total, assumed_rate, projection_years, monthly_contribution
+        )
+        total_contributed = total + monthly_contribution * projection_years * 12
+        estimated_gain = projected_value - total_contributed
+
+        with explanation_column:
+            st.markdown(
+                f"""
+                <div class="profile-card">
+                    <p><strong>Selected-period return:</strong> {portfolio_return:.2f}%</p>
+                    <p><strong>Historical annualized return:</strong> {historical_cagr * 100:.2f}%</p>
+                    <p><strong>Projection assumption:</strong> {assumed_return:.1f}% a year</p>
+                    <p><strong>Personal target:</strong> {target_return:.1f}% a year</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            if assumed_return >= target_return:
+                st.success("The selected assumption meets or exceeds your target return.")
+            else:
+                st.warning("The selected assumption is below your target return.")
+
+        projection_metrics = st.columns(3)
+        projection_metrics[0].metric(
+            "Projected value",
+            f"£{projected_value:,.2f}",
+            help="Estimated future value after compound growth and monthly contributions, using your selected assumptions.",
+        )
+        projection_metrics[1].metric(
+            "Estimated gain",
+            f"£{estimated_gain:,.2f}",
+            help="Projected value minus the current portfolio and all future cash contributions.",
+        )
+        projection_metrics[2].metric(
+            "Total contributed",
+            f"£{total_contributed:,.2f}",
+            help="Current portfolio value plus all monthly contributions; this excludes investment growth.",
+        )
+
+        projection_rows = []
+        low_rate = assumed_rate - 0.03
+        high_rate = assumed_rate + 0.03
+        for year in range(0, projection_years + 1):
+            projection_rows.extend(
+                [
+                    {"Year": year, "Scenario": "Lower", "Value": project_future_value(total, low_rate, year, monthly_contribution)},
+                    {"Year": year, "Scenario": "Selected", "Value": project_future_value(total, assumed_rate, year, monthly_contribution)},
+                    {"Year": year, "Scenario": "Higher", "Value": project_future_value(total, high_rate, year, monthly_contribution)},
+                ]
+            )
+        projection_frame = pd.DataFrame(projection_rows)
+        projection_figure = px.line(
+            projection_frame,
+            x="Year",
+            y="Value",
+            color="Scenario",
+            title="Illustrative portfolio value over time",
+            color_discrete_map={"Lower": "#747b82", "Selected": "#f2f4f5", "Higher": "#aeb4ba"},
+        )
+        projection_figure.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(8,9,10,.90)",
+            font=dict(color="#d9dde1"),
+            yaxis_tickprefix="£",
+            legend_title_text="Annual-return scenario",
+        )
+        projection_figure.update_yaxes(gridcolor="rgba(158,181,188,.14)")
+        projection_figure.update_xaxes(showgrid=False, dtick=max(1, projection_years // 10))
+        st.plotly_chart(projection_figure, use_container_width=True)
+        st.caption(
+            "Illustration only—not financial advice. Lower and higher scenarios are three percentage points below and above your selected annual return. Actual returns can vary substantially and losses are possible."
+        )
 
 with simulation_tab:
     st.subheader("Stock simulation")

@@ -2,7 +2,7 @@ import io
 import traceback
 import pandas as pd
 from utils.portfolio import load_portfolio, load_portfolio_from_upload, download_prices, get_latest_prices, number_rows_from_one
-from utils.metrics import position_values
+from utils.metrics import position_values, portfolio_historical_performance, project_future_value
 from utils.simulation import simulate_from_prices, evaluate_risk_profile
 
 
@@ -36,6 +36,20 @@ def test_simulation_and_risk_profile_helpers():
 
     profile = evaluate_risk_profile(risk_tolerance=4, investment_horizon_years=5, volatility=0.25)
     assert profile['label'] in {'Conservative', 'Balanced', 'Aggressive'}
+
+
+def test_portfolio_return_and_projection_helpers():
+    portfolio = pd.DataFrame({'Ticker': ['AAA', 'BBB'], 'Shares': [2, 1]})
+    dates = pd.to_datetime(['2025-01-01', '2026-01-01'])
+    prices = {
+        'AAA': pd.DataFrame({'Close': [100.0, 110.0]}, index=dates),
+        'BBB': pd.DataFrame({'Close': [200.0, 220.0]}, index=dates),
+    }
+    performance = portfolio_historical_performance(portfolio, prices)
+    assert round(performance['total_return'], 6) == 0.1
+    assert round(performance['annualized_return'], 2) == 0.1
+    assert round(project_future_value(1000, 0.10, 1), 2) == 1100.00
+    assert project_future_value(1000, 0.0, 1, 100) == 2200
 
 
 def run_smoke():

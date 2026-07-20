@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 
 
 def position_values(portfolio_df, latest_prices):
@@ -39,3 +40,60 @@ def portfolio_return_from_prices(price_dict):
             else:
                 returns[ticker] = (last / first - 1) * 100
     return returns
+
+
+def portfolio_historical_performance(portfolio_df, price_dict):
+    """Estimate buy-and-hold performance for the complete portfolio.
+
+    The calculation assumes the current share quantities were held for the
+    selected price-history period and excludes fees, taxes, dividends, and
+    currency conversion.
+    """
+    shares_by_ticker = portfolio_df.set_index('Ticker')['Shares'].to_dict()
+    start_value = 0.0
+    end_value = 0.0
+    first_dates = []
+    last_dates = []
+
+    for ticker, shares in shares_by_ticker.items():
+        frame = price_dict.get(ticker)
+        if frame is None or frame.empty or 'Close' not in frame.columns:
+            continue
+        closes = pd.to_numeric(frame['Close'], errors='coerce').dropna()
+        if len(closes) < 2:
+            continue
+        start_value += float(shares) * float(closes.iloc[0])
+        end_value += float(shares) * float(closes.iloc[-1])
+        first_dates.append(pd.Timestamp(closes.index[0]))
+        last_dates.append(pd.Timestamp(closes.index[-1]))
+
+    if start_value <= 0 or not first_dates or not last_dates:
+        return None
+
+    total_return = end_value / start_value - 1
+    elapsed_days = max((max(last_dates) - min(first_dates)).days, 1)
+    elapsed_years = elapsed_days / 365.25
+    annualized_return = (end_value / start_value) ** (1 / elapsed_years) - 1
+    return {
+        'start_value': start_value,
+        'end_value': end_value,
+        'total_return': total_return,
+        'annualized_return': annualized_return,
+        'elapsed_years': elapsed_years,
+    }
+
+
+def project_future_value(current_value, annual_rate, years, monthly_contribution=0.0):
+    """Project compound growth with contributions made at each month end."""
+    months = max(int(years * 12), 0)
+    if annual_rate <= -1:
+        raise ValueError("annual_rate must be greater than -100%")
+    monthly_rate = (1 + annual_rate) ** (1 / 12) - 1
+    grown_portfolio = float(current_value) * (1 + monthly_rate) ** months
+    if monthly_rate == 0:
+        grown_contributions = float(monthly_contribution) * months
+    else:
+        grown_contributions = float(monthly_contribution) * (
+            ((1 + monthly_rate) ** months - 1) / monthly_rate
+        )
+    return grown_portfolio + grown_contributions
