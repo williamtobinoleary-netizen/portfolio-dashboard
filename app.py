@@ -50,6 +50,31 @@ def load_portfolio_from_upload(uploaded_file):
 
 LSEG_COLORS = ["#F2F4F5", "#C4C9CE", "#90979E", "#686E74", "#44494E", "#B0B6BC"]
 
+LSE_UNIVERSE = {
+    "LSEG.L": "London Stock Exchange Group",
+    "AZN.L": "AstraZeneca",
+    "SHEL.L": "Shell",
+    "HSBA.L": "HSBC Holdings",
+    "ULVR.L": "Unilever",
+    "BP.L": "BP",
+    "GSK.L": "GSK",
+    "BARC.L": "Barclays",
+    "LLOY.L": "Lloyds Banking Group",
+    "RR.L": "Rolls-Royce Holdings",
+    "REL.L": "RELX",
+    "NG.L": "National Grid",
+    "DGE.L": "Diageo",
+    "RIO.L": "Rio Tinto",
+    "GLEN.L": "Glencore",
+    "VOD.L": "Vodafone Group",
+    "TSCO.L": "Tesco",
+    "SBRY.L": "J Sainsbury",
+    "BA.L": "BAE Systems",
+    "AAL.L": "Anglo American",
+    "STAN.L": "Standard Chartered",
+    "LAND.L": "Land Securities Group",
+}
+
 st.set_page_config(
     page_title="LSEG Portfolio Analytics",
     page_icon="◈",
@@ -339,8 +364,42 @@ st.markdown(
 st.sidebar.header("Settings")
 period = st.sidebar.selectbox("Price history", ["1y", "6mo", "3mo"], index=0)
 refresh_clicked = st.sidebar.button("Refresh dashboard", use_container_width=True)
-st.sidebar.caption("Edit portfolio.csv and press Refresh dashboard to update the view.")
-uploaded_file = st.sidebar.file_uploader("Upload a portfolio CSV", type=["csv"])
+portfolio_source = st.sidebar.radio(
+    "Portfolio source",
+    ["Build in app", "Upload CSV", "Sample portfolio"],
+    horizontal=False,
+)
+
+uploaded_file = None
+built_portfolio = None
+if portfolio_source == "Build in app":
+    selected_tickers = st.sidebar.multiselect(
+        "Select London-listed companies",
+        options=list(LSE_UNIVERSE),
+        default=["LSEG.L", "AZN.L", "SHEL.L"],
+        format_func=lambda ticker: f"{LSE_UNIVERSE[ticker]} · {ticker}",
+        help="Choose one or more holdings, then set the number of shares below.",
+    )
+    portfolio_rows = []
+    with st.sidebar.expander("Set holding sizes", expanded=True):
+        for selected_ticker in selected_tickers:
+            shares = st.number_input(
+                f"{LSE_UNIVERSE[selected_ticker]} ({selected_ticker})",
+                min_value=0.0,
+                value=10.0,
+                step=1.0,
+                key=f"portfolio_shares_{selected_ticker}",
+            )
+            if shares > 0:
+                portfolio_rows.append({"Ticker": selected_ticker, "Shares": shares})
+    built_portfolio = pd.DataFrame(portfolio_rows, columns=["Ticker", "Shares"])
+    st.sidebar.caption("Your dashboard updates automatically when holdings change.")
+elif portfolio_source == "Upload CSV":
+    uploaded_file = st.sidebar.file_uploader("Upload a portfolio CSV", type=["csv"])
+    st.sidebar.caption("The CSV must contain Ticker and Shares columns.")
+else:
+    st.sidebar.caption("Using the holdings stored in portfolio.csv.")
+
 st.sidebar.divider()
 st.sidebar.subheader("Stock simulation")
 simulation_ticker = st.sidebar.text_input("Ticker", value="AAPL")
@@ -350,10 +409,18 @@ if refresh_clicked:
     st.rerun()
 
 try:
-    if uploaded_file is not None:
+    if portfolio_source == "Build in app":
+        if built_portfolio is None or built_portfolio.empty:
+            st.info("Select at least one company and enter a share amount greater than zero.")
+            st.stop()
+        df = built_portfolio
+    elif portfolio_source == "Upload CSV" and uploaded_file is not None:
         df = load_portfolio_from_upload(uploaded_file)
         if df is None:
             raise ValueError("No portfolio data loaded from upload")
+    elif portfolio_source == "Upload CSV":
+        st.info("Upload a portfolio CSV to continue, or choose another portfolio source.")
+        st.stop()
     else:
         df = load_portfolio("portfolio.csv")
 except Exception as exc:
@@ -367,6 +434,12 @@ tickers = df["Ticker"].tolist()
 with st.spinner("Downloading market data..."):
     prices = download_prices(tickers, period=period)
 latest = get_latest_prices(prices)
+
+# Yahoo commonly reports London-listed equities in GBp (pence). Normalize
+# these quotes to GBP so portfolio values match the pound-denominated display.
+for ticker, latest_price in latest.items():
+    if ticker.endswith(".L") and latest_price is not None:
+        latest[ticker] = latest_price / 100
 
 df_vals, total = position_values(df, latest)
 total_shares = int(df["Shares"].sum())
