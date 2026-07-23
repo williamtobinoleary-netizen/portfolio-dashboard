@@ -730,9 +730,38 @@ with outlook_column:
             hovermode="x unified",
         )
         st.plotly_chart(outlook_figure, use_container_width=True)
+
+        momentum_20d = (
+            (latest_close / historical_series["Price"].iloc[-21] - 1) * 100
+            if len(historical_series) >= 21 and historical_series["Price"].iloc[-21]
+            else 0.0
+        )
+        signal_score = int(forecast_change > 2) + int(momentum_20d > 2)
+        signal_score -= int(forecast_change < -2) + int(momentum_20d < -2)
+        if signal_score >= 2:
+            market_outlook, action_signal = "Bullish", "Leans buy"
+            signal_message = "Both the recent momentum and projected trend are positive. Consider researching valuation, results and downside risk before acting."
+            signal_display = st.success
+        elif signal_score <= -2:
+            market_outlook, action_signal = "Bearish", "Leans sell"
+            signal_message = "Both the recent momentum and projected trend are negative. Consider reviewing the investment case, risk limits and upcoming company events."
+            signal_display = st.error
+        else:
+            market_outlook, action_signal = "Neutral / mixed", "Hold and watch"
+            signal_message = "The trend indicators do not agree strongly enough to establish a clear direction. Waiting for more evidence may be appropriate."
+            signal_display = st.info
+
+        st.markdown("#### Projection-based research signal")
+        signal_columns = st.columns(4)
+        signal_columns[0].metric("Market outlook", market_outlook)
+        signal_columns[1].metric("Model signal", action_signal)
+        signal_columns[2].metric("20-day momentum", f"{momentum_20d:+.1f}%")
+        signal_columns[3].metric("Projected trend", f"{forecast_change:+.1f}%")
+        signal_display(signal_message)
         st.caption(
             "The dashed line is a simple linear trend based on up to 90 recent closes. "
-            "It is an illustration, not a price target or financial advice. Headlines are supplied by Yahoo Finance."
+            "The buy, hold or sell wording is a mechanical research indicator based only on the two displayed trends; "
+            "it is not personalised financial advice or a price target. Headlines are supplied by Yahoo Finance."
         )
 
 st.divider()
@@ -780,34 +809,6 @@ with st.expander("How to read the portfolio summary"):
         Prices may be delayed. Calculations exclude trading fees, tax, dividends, inflation and, for portfolios mixing markets, currency movements.
         """
     )
-
-st.divider()
-holdings_column, allocation_column = st.columns([1.18, 0.82], gap="large")
-with holdings_column:
-    st.markdown('<div class="section-kicker">Positions</div>', unsafe_allow_html=True)
-    st.subheader("Holdings")
-    ordered_holdings = df_vals.sort_values("Value", ascending=False)
-    st.dataframe(number_rows_from_one(ordered_holdings), use_container_width=True)
-
-with allocation_column:
-    st.markdown('<div class="section-kicker">Exposure</div>', unsafe_allow_html=True)
-    st.subheader("Allocation")
-    allocation_figure = px.pie(
-        df_vals,
-        names="Ticker",
-        values="Value",
-        title="Portfolio allocation by holding",
-        hole=0.48,
-        color_discrete_sequence=LSEG_COLORS,
-    )
-    allocation_figure.update_traces(textposition="inside", textinfo="percent+label")
-    allocation_figure.update_layout(
-        margin=dict(l=20, r=20, t=55, b=20),
-        legend_title_text="Holding",
-        paper_bgcolor="rgba(0,0,0,0)",
-        legend=dict(bgcolor="rgba(0,0,0,0)"),
-    )
-    st.plotly_chart(allocation_figure, use_container_width=True)
 
 st.divider()
 st.markdown('<div class="section-kicker">Analytics workspace</div>', unsafe_allow_html=True)
@@ -1026,3 +1027,31 @@ with ai_tab:
                 reply = chat(st.session_state.ai_messages)
             st.markdown(reply)
             st.session_state.ai_messages.append({"role": "assistant", "content": reply})
+
+st.divider()
+holdings_column, allocation_column = st.columns([1.18, 0.82], gap="large")
+with holdings_column:
+    st.markdown('<div class="section-kicker">Positions</div>', unsafe_allow_html=True)
+    st.subheader("Holdings")
+    ordered_holdings = df_vals.sort_values("Value", ascending=False)
+    st.dataframe(number_rows_from_one(ordered_holdings), use_container_width=True)
+
+with allocation_column:
+    st.markdown('<div class="section-kicker">Exposure</div>', unsafe_allow_html=True)
+    st.subheader("Allocation")
+    allocation_figure = px.pie(
+        df_vals,
+        names="Ticker",
+        values="Value",
+        title="Portfolio allocation by holding",
+        hole=0.48,
+        color_discrete_sequence=LSEG_COLORS,
+    )
+    allocation_figure.update_traces(textposition="inside", textinfo="percent+label")
+    allocation_figure.update_layout(
+        margin=dict(l=20, r=20, t=55, b=20),
+        legend_title_text="Holding",
+        paper_bgcolor="rgba(0,0,0,0)",
+        legend=dict(bgcolor="rgba(0,0,0,0)"),
+    )
+    st.plotly_chart(allocation_figure, use_container_width=True)
