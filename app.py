@@ -344,6 +344,108 @@ st.markdown(
         .stTabs [aria-selected="true"] { background: linear-gradient(180deg, #dde1e4, #747b81) !important; border-color: #f5f6f7; }
         .stTabs [aria-selected="true"] p { color: #08090a !important; font-weight: 800; }
         .profile-card { background: linear-gradient(120deg, #31363b, #090a0b 65%); border-left: 4px solid #dfe3e6; border-radius: 4px; box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 18px 42px rgba(0,0,0,.28); }
+
+        /*
+         * Theme-aware overrides. Streamlit changes these variables when the
+         * user selects Light, Dark, or System from the app menu. Keep this
+         * block last so the decorative terminal styling cannot lock the app
+         * to a dark palette.
+         */
+        :root {
+            color-scheme: normal;
+            --dashboard-surface: color-mix(in srgb, var(--secondary-background-color) 88%, var(--background-color));
+            --dashboard-raised: color-mix(in srgb, var(--secondary-background-color) 72%, var(--background-color));
+            --dashboard-border: color-mix(in srgb, var(--text-color) 22%, transparent);
+            --dashboard-muted: color-mix(in srgb, var(--text-color) 68%, transparent);
+            --dashboard-shadow: color-mix(in srgb, var(--text-color) 15%, transparent);
+        }
+        .stApp {
+            background-color: var(--background-color);
+            background-image:
+                radial-gradient(ellipse at 76% -5%, color-mix(in srgb, var(--primary-color) 16%, transparent), transparent 32rem),
+                radial-gradient(ellipse at 3% 62%, color-mix(in srgb, var(--primary-color) 10%, transparent), transparent 28rem),
+                linear-gradient(color-mix(in srgb, var(--text-color) 3%, transparent) 1px, transparent 1px),
+                linear-gradient(90deg, color-mix(in srgb, var(--text-color) 3%, transparent) 1px, transparent 1px);
+            background-size: auto, auto, 42px 42px, 42px 42px;
+        }
+        [data-testid="stAppViewContainer"],
+        [data-testid="stAppViewContainer"] p,
+        [data-testid="stAppViewContainer"] label,
+        [data-testid="stAppViewContainer"] .stMarkdown,
+        [data-testid="stAppViewContainer"] [data-testid="stWidgetLabel"],
+        [data-testid="stAppViewContainer"] [data-baseweb="slider"] div,
+        [data-testid="stAppViewContainer"] [data-baseweb="tab"] p,
+        [data-testid="stAppViewContainer"] [data-testid="stCaptionContainer"] p,
+        h2, h3 {
+            color: var(--text-color);
+        }
+        [data-testid="stHeader"] {
+            background: color-mix(in srgb, var(--background-color) 78%, transparent);
+        }
+        [data-testid="stSidebar"] {
+            background: var(--secondary-background-color);
+            border-right: 1px solid var(--dashboard-border);
+            box-shadow: 12px 0 44px var(--dashboard-shadow);
+        }
+        [data-testid="stSidebar"],
+        [data-testid="stSidebar"] p,
+        [data-testid="stSidebar"] label,
+        [data-testid="stSidebar"] h1,
+        [data-testid="stSidebar"] h2,
+        [data-testid="stSidebar"] h3,
+        [data-testid="stSidebar"] [data-testid="stWidgetLabel"] {
+            color: var(--text-color);
+        }
+        [data-testid="stMetric"],
+        [data-testid="stDataFrame"],
+        [data-testid="stPlotlyChart"],
+        [data-testid="stExpander"] {
+            background: var(--dashboard-surface);
+            border-color: var(--dashboard-border);
+            box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-color) 10%, transparent), 0 12px 34px var(--dashboard-shadow);
+        }
+        [data-testid="stMetricLabel"] { color: var(--dashboard-muted); }
+        [data-testid="stMetricValue"] { color: var(--text-color); }
+        [data-testid="stMetric"]:after {
+            background: linear-gradient(90deg, var(--dashboard-border), var(--primary-color), var(--dashboard-border));
+        }
+        .hero {
+            background: radial-gradient(circle at 90% 5%, color-mix(in srgb, var(--primary-color) 16%, transparent), transparent 17rem), var(--dashboard-raised);
+            border-color: var(--dashboard-border);
+            box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-color) 12%, transparent), 0 22px 55px var(--dashboard-shadow);
+            color: var(--text-color);
+        }
+        .hero:after {
+            background: conic-gradient(from 215deg, var(--secondary-background-color), var(--primary-color), var(--background-color), var(--text-color), var(--secondary-background-color));
+            border-color: var(--dashboard-border);
+            box-shadow: inset 0 0 22px var(--dashboard-shadow), 0 0 38px var(--dashboard-shadow);
+        }
+        .hero__eyebrow, .hero p, .hero__chip { color: var(--dashboard-muted); }
+        .hero h1 {
+            background: none;
+            color: var(--text-color);
+            filter: none;
+        }
+        .hero__chip {
+            background: color-mix(in srgb, var(--secondary-background-color) 75%, transparent);
+            border-color: var(--dashboard-border);
+        }
+        .section-kicker { color: var(--primary-color); text-shadow: none; }
+        .profile-card {
+            background: var(--dashboard-surface);
+            border-color: var(--dashboard-border);
+            border-left-color: var(--primary-color);
+            box-shadow: 0 12px 34px var(--dashboard-shadow);
+            color: var(--text-color);
+        }
+        .profile-card p { color: var(--text-color) !important; }
+        .stTabs [data-baseweb="tab-list"] { border-bottom-color: var(--dashboard-border); }
+        .stTabs [aria-selected="true"] {
+            background: var(--secondary-background-color) !important;
+            border-color: var(--dashboard-border);
+        }
+        .stTabs [aria-selected="true"] p { color: var(--text-color) !important; }
+        hr { border-color: var(--dashboard-border) !important; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -529,8 +631,6 @@ with allocation_column:
         margin=dict(l=20, r=20, t=55, b=20),
         legend_title_text="Holding",
         paper_bgcolor="rgba(0,0,0,0)",
-        font=dict(color="#d9dde1"),
-        title_font=dict(color="#f3fbfb"),
         legend=dict(bgcolor="rgba(0,0,0,0)"),
     )
     st.plotly_chart(allocation_figure, use_container_width=True)
@@ -647,12 +747,9 @@ with projection_tab:
         )
         projection_figure.update_layout(
             paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(8,9,10,.90)",
-            font=dict(color="#d9dde1"),
             yaxis_tickprefix="£",
             legend_title_text="Annual-return scenario",
         )
-        projection_figure.update_yaxes(gridcolor="rgba(158,181,188,.14)")
         projection_figure.update_xaxes(showgrid=False, dtick=max(1, projection_years // 10))
         st.plotly_chart(projection_figure, use_container_width=True)
         st.caption(
@@ -726,12 +823,8 @@ with performance_tab:
             xaxis_title=None,
             yaxis_title="Close",
             paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(8, 9, 10, .90)",
-            font=dict(color="#d9dde1"),
-            title_font=dict(color="#f3fbfb"),
         )
         performance_figure.update_xaxes(showgrid=False)
-        performance_figure.update_yaxes(gridcolor="rgba(158,181,188,.14)")
         st.plotly_chart(performance_figure, use_container_width=True)
 
 with ai_tab:
