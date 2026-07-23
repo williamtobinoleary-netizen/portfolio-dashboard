@@ -12,3 +12,11 @@ __pycache__/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Local browser debugging profiles and screenshots
+.chrome-debug*/
+.edge-debug*/
+dashboard*.png
+sidebar*.png
+.chrome-dom
+.chrome-verify
