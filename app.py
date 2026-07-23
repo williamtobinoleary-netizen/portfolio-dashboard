@@ -523,6 +523,80 @@ st.markdown(
         .news-card a { color: var(--text-color); font-weight: 700; text-decoration: none; }
         .news-card a:hover { color: var(--primary-color); text-decoration: underline; }
         .news-card__meta { color: var(--dashboard-muted); font-size: .72rem; margin-top: .3rem; }
+        .signal-panel {
+            background: var(--dashboard-surface);
+            border: 1px solid var(--dashboard-border);
+            border-radius: 7px;
+            margin: .35rem 0 .45rem;
+            padding: .7rem .9rem .6rem;
+        }
+        .signal-gauge { position: relative; }
+        .signal-gauge__track {
+            background: linear-gradient(90deg, #d9534f 0%, #d9a441 35%, #8b9298 50%, #8ab66b 68%, #2e9d61 100%);
+            border-radius: 999px;
+            height: 9px;
+            position: relative;
+        }
+        .signal-gauge__marker {
+            background: #111;
+            border: 0;
+            border-radius: 1px;
+            box-shadow: 0 0 0 2px #fff, 0 1px 7px rgba(0,0,0,.55);
+            height: 29px;
+            left: var(--signal-position);
+            position: absolute;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: 4px;
+            z-index: 3;
+        }
+        .signal-gauge__marker:after {
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-top: 7px solid #111;
+            bottom: -10px;
+            content: "";
+            left: 50%;
+            position: absolute;
+            transform: translateX(-50%);
+        }
+        .signal-gauge__labels {
+            color: var(--dashboard-muted);
+            display: flex;
+            font-size: .62rem;
+            justify-content: space-between;
+            margin-top: .28rem;
+            text-transform: uppercase;
+        }
+        .signal-panel__detail {
+            color: var(--dashboard-muted);
+            font-size: .68rem;
+            line-height: 1.3;
+            margin-top: .45rem;
+        }
+        .signal-panel__detail span + span:before { content: " · "; }
+        .uk-brief {
+            border-top: 1px solid var(--dashboard-border);
+            margin-top: .8rem;
+            padding-top: .65rem;
+        }
+        .uk-brief__title {
+            color: var(--dashboard-muted);
+            font-size: .68rem;
+            font-weight: 800;
+            letter-spacing: .12em;
+            margin-bottom: .35rem;
+            text-transform: uppercase;
+        }
+        .uk-brief__item {
+            border-bottom: 1px solid var(--dashboard-border);
+            font-size: .72rem;
+            line-height: 1.25;
+            padding: .38rem 0;
+        }
+        .uk-brief__item:last-child { border-bottom: 0; }
+        .uk-brief__item a { color: var(--text-color); text-decoration: none; }
+        .uk-brief__item a:hover { color: var(--primary-color); }
         /* Compact masthead: the market workspace is now the visual focus. */
         .hero {
             margin-bottom: .8rem;
@@ -739,25 +813,48 @@ with outlook_column:
         signal_score = int(forecast_change > 2) + int(momentum_20d > 2)
         signal_score -= int(forecast_change < -2) + int(momentum_20d < -2)
         if signal_score >= 2:
-            market_outlook, action_signal = "Bullish", "Leans buy"
             signal_message = "Both the recent momentum and projected trend are positive. Consider researching valuation, results and downside risk before acting."
-            signal_display = st.success
         elif signal_score <= -2:
-            market_outlook, action_signal = "Bearish", "Leans sell"
             signal_message = "Both the recent momentum and projected trend are negative. Consider reviewing the investment case, risk limits and upcoming company events."
-            signal_display = st.error
         else:
-            market_outlook, action_signal = "Neutral / mixed", "Hold and watch"
             signal_message = "The trend indicators do not agree strongly enough to establish a clear direction. Waiting for more evidence may be appropriate."
-            signal_display = st.info
 
         st.markdown("#### Projection-based research signal")
-        signal_columns = st.columns(4)
-        signal_columns[0].metric("Market outlook", market_outlook)
-        signal_columns[1].metric("Model signal", action_signal)
-        signal_columns[2].metric("20-day momentum", f"{momentum_20d:+.1f}%")
-        signal_columns[3].metric("Projected trend", f"{forecast_change:+.1f}%")
-        signal_display(signal_message)
+        signal_position = 88 if signal_score >= 2 else 12 if signal_score <= -2 else 50
+        st.markdown(
+            f"""
+            <div class="signal-panel">
+                <div class="signal-gauge" style="--signal-position: {signal_position}%">
+                    <div class="signal-gauge__track"><div class="signal-gauge__marker"></div></div>
+                    <div class="signal-gauge__labels"><span>Sell</span><span>Hold</span><span>Buy</span></div>
+                </div>
+                <div class="signal-panel__detail">
+                    <span>20-day momentum: {momentum_20d:+.1f}%</span>
+                    <span>Projected trend: {forecast_change:+.1f}%</span>
+                    <span>{signal_message}</span>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        uk_market_news = load_company_news("^FTSE", limit=3)
+        if uk_market_news:
+            uk_headlines = []
+            for story in uk_market_news:
+                short_title = story["title"] if len(story["title"]) <= 82 else f"{story['title'][:79].rstrip()}…"
+                uk_headlines.append(
+                    f'<div class="uk-brief__item"><a href="{escape(story["url"], quote=True)}" '
+                    f'target="_blank" rel="noopener noreferrer">{escape(short_title)}</a></div>'
+                )
+            st.markdown(
+                '<div class="uk-brief"><div class="uk-brief__title">UK market brief</div>'
+                + "".join(uk_headlines)
+                + "</div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            st.caption("No UK market headlines are available right now.")
         st.caption(
             "The dashed line is a simple linear trend based on up to 90 recent closes. "
             "The buy, hold or sell wording is a mechanical research indicator based only on the two displayed trends; "
