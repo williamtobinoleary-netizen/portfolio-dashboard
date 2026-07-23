@@ -5,6 +5,7 @@ import plotly.express as px
 import streamlit as st
 
 from utils.simulation import evaluate_risk_profile, simulate_from_prices
+from utils.ai_assistant import chat, build_system_prompt, get_portfolio_summary
 
 
 portfolio_module = importlib.import_module("utils.portfolio")
@@ -537,8 +538,8 @@ with allocation_column:
 st.divider()
 st.markdown('<div class="section-kicker">Analytics workspace</div>', unsafe_allow_html=True)
 st.subheader("Portfolio analysis")
-projection_tab, simulation_tab, risk_tab, performance_tab = st.tabs(
-    ["Portfolio projection", "Stock simulation", "Risk profile", "Performance examples"]
+projection_tab, simulation_tab, risk_tab, performance_tab, ai_tab = st.tabs(
+    ["Portfolio projection", "Stock simulation", "Risk profile", "Performance examples", "AI assistant"]
 )
 
 with projection_tab:
@@ -732,3 +733,29 @@ with performance_tab:
         performance_figure.update_xaxes(showgrid=False)
         performance_figure.update_yaxes(gridcolor="rgba(158,181,188,.14)")
         st.plotly_chart(performance_figure, use_container_width=True)
+
+with ai_tab:
+    st.subheader("AI Portfolio Assistant")
+
+    if "ai_messages" not in st.session_state:
+        summary = get_portfolio_summary(df_vals, total, portfolio_return, historical_performance, tickers)
+        st.session_state.ai_messages = [
+            {"role": "system", "content": build_system_prompt(summary)},
+            {"role": "assistant", "content": "I can answer questions about your portfolio. Try asking about your top holding, performance, risk, or diversification."},
+        ]
+
+    chat_history = [m for m in st.session_state.ai_messages if m["role"] != "system"]
+
+    for msg in chat_history:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    if prompt := st.chat_input("Ask about your portfolio..."):
+        st.chat_message("user").markdown(prompt)
+        st.session_state.ai_messages.append({"role": "user", "content": prompt})
+
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                reply = chat(st.session_state.ai_messages)
+            st.markdown(reply)
+            st.session_state.ai_messages.append({"role": "assistant", "content": reply})
