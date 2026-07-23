@@ -1,5 +1,9 @@
 import importlib
+from datetime import timedelta
+from html import escape
+from urllib.parse import urlparse
 
+import numpy as np
 import pandas as pd
 import plotly.express as px
 import streamlit as st
@@ -52,6 +56,14 @@ def load_portfolio_from_upload(uploaded_file):
         return pd.read_csv(uploaded_file)
 
 
+st.set_page_config(
+    page_title="LSEG Portfolio Analytics",
+    page_icon="◈",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+
 LSEG_COLORS = ["#F2F4F5", "#C4C9CE", "#90979E", "#686E74", "#44494E", "#B0B6BC"]
 
 LSE_UNIVERSE = {
@@ -79,12 +91,68 @@ LSE_UNIVERSE = {
     "LAND.L": "Land Securities Group",
 }
 
-st.set_page_config(
-    page_title="LSEG Portfolio Analytics",
-    page_icon="◈",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
+
+@st.cache_data(ttl=900, show_spinner=False)
+def load_company_news(ticker, limit=8):
+    """Return a normalized list of recent Yahoo Finance stories."""
+    try:
+        import yfinance as yf
+
+        stories = yf.Ticker(ticker).news or []
+    except Exception:
+        return []
+
+    normalized = []
+    for story in stories:
+        content = story.get("content", story) or {}
+        canonical_url = content.get("canonicalUrl") or {}
+        click_url = content.get("clickThroughUrl") or {}
+        url = (
+            story.get("link")
+            or content.get("link")
+            or canonical_url.get("url")
+            or click_url.get("url")
+        )
+        title = content.get("title") or story.get("title")
+        provider = content.get("provider") or story.get("publisher") or "Yahoo Finance"
+        if isinstance(provider, dict):
+            provider = provider.get("displayName") or provider.get("name") or "Yahoo Finance"
+        published = content.get("pubDate") or story.get("providerPublishTime")
+        if title and url and urlparse(str(url)).scheme in {"http", "https"}:
+            normalized.append(
+                {
+                    "title": str(title),
+                    "url": str(url),
+                    "provider": str(provider),
+                    "published": published,
+                }
+            )
+        if len(normalized) >= limit:
+            break
+    return normalized
+
+
+def build_trend_forecast(price_frame, horizon=30, lookback=90):
+    """Create a simple linear-trend illustration from recent closing prices."""
+    if price_frame is None or price_frame.empty or len(price_frame) < 10:
+        return None
+    history = price_frame[["Close"]].dropna().tail(lookback).copy()
+    if len(history) < 10:
+        return None
+    close = history["Close"].astype(float).to_numpy()
+    x_values = np.arange(len(close), dtype=float)
+    slope, intercept = np.polyfit(x_values, close, 1)
+    future_x = np.arange(len(close), len(close) + horizon, dtype=float)
+    last_date = pd.Timestamp(history.index[-1]).tz_localize(None)
+    future_dates = pd.bdate_range(last_date + timedelta(days=1), periods=horizon)
+    forecast = pd.DataFrame(
+        {"Date": future_dates, "Price": np.maximum(intercept + slope * future_x, 0), "Series": "Trend forecast"}
+    )
+    historical = history.reset_index()
+    historical.columns = ["Date", "Price"]
+    historical["Date"] = pd.to_datetime(historical["Date"]).dt.tz_localize(None)
+    historical["Series"] = "Historical close"
+    return pd.concat([historical, forecast], ignore_index=True)
 
 st.markdown(
     """
@@ -445,6 +513,31 @@ st.markdown(
             border-color: var(--dashboard-border);
         }
         .stTabs [aria-selected="true"] p { color: var(--text-color) !important; }
+        .news-card {
+            background: var(--dashboard-surface);
+            border: 1px solid var(--dashboard-border);
+            border-radius: 6px;
+            margin: 0 0 .65rem;
+            padding: .75rem .85rem;
+        }
+        .news-card a { color: var(--text-color); font-weight: 700; text-decoration: none; }
+        .news-card a:hover { color: var(--primary-color); text-decoration: underline; }
+        .news-card__meta { color: var(--dashboard-muted); font-size: .72rem; margin-top: .3rem; }
+        /* Compact masthead: the market workspace is now the visual focus. */
+        .hero {
+            margin-bottom: .8rem;
+            padding: .7rem 1.1rem;
+        }
+        .hero:before, .hero:after { display: none; }
+        .hero__eyebrow { font-size: .58rem; line-height: 1; }
+        .hero h1 {
+            font-size: clamp(1.15rem, 2vw, 1.5rem);
+            letter-spacing: -.025em;
+            line-height: 1.15;
+            margin: .2rem 0 .1rem;
+        }
+        .hero p { font-size: .7rem; line-height: 1.2; }
+        .hero__status { display: none; }
         hr { border-color: var(--dashboard-border) !important; }
     </style>
     """,
@@ -457,11 +550,6 @@ st.markdown(
         <div class="hero__eyebrow">Portfolio intelligence</div>
         <h1>LSEG Portfolio Analytics</h1>
         <p>A consolidated view of portfolio value, allocation, performance and risk.</p>
-        <div class="hero__status">
-            <span class="hero__chip">Market data online</span>
-            <span class="hero__chip">Portfolio terminal</span>
-            <span class="hero__chip">Risk analytics</span>
-        </div>
     </div>
     """,
     unsafe_allow_html=True,
@@ -533,9 +621,6 @@ except Exception as exc:
     st.error(f"Could not load portfolio.csv: {exc}")
     st.stop()
 
-with st.expander("Portfolio · Current portfolio input"):
-    st.dataframe(number_rows_from_one(df), use_container_width=True)
-
 tickers = df["Ticker"].tolist()
 with st.spinner("Downloading market data..."):
     prices = download_prices(tickers, period=period)
@@ -565,6 +650,92 @@ portfolio_return = (
     else None
 )
 
+st.markdown('<div class="section-kicker">Market intelligence</div>', unsafe_allow_html=True)
+st.subheader("Company outlook and latest news")
+outlook_column, news_column = st.columns([1.65, 0.85], gap="large")
+
+with news_column:
+    intelligence_ticker = st.selectbox(
+        "Company news",
+        options=list(LSE_UNIVERSE),
+        format_func=lambda ticker: f"{LSE_UNIVERSE[ticker]} · {ticker}",
+        key="intelligence_company",
+        help="Choose any company from the available London-listed universe.",
+    )
+    st.markdown("#### Latest headlines")
+    company_news = load_company_news(intelligence_ticker)
+    if company_news:
+        for story in company_news:
+            published = story["published"]
+            if isinstance(published, (int, float)):
+                published_label = pd.to_datetime(published, unit="s", utc=True).strftime("%d %b %Y, %H:%M UTC")
+            elif published:
+                parsed_date = pd.to_datetime(published, utc=True, errors="coerce")
+                published_label = parsed_date.strftime("%d %b %Y, %H:%M UTC") if pd.notna(parsed_date) else "Recent"
+            else:
+                published_label = "Recent"
+            st.markdown(
+                f"""
+                <div class="news-card">
+                    <a href="{escape(story['url'], quote=True)}" target="_blank" rel="noopener noreferrer">{escape(story['title'])}</a>
+                    <div class="news-card__meta">{escape(story['provider'])} · {published_label}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+    else:
+        st.info("No recent headlines are available for this company right now.")
+
+with outlook_column:
+    st.markdown(f"#### {LSE_UNIVERSE[intelligence_ticker]} market view")
+    if intelligence_ticker in prices and prices[intelligence_ticker] is not None and not prices[intelligence_ticker].empty:
+        intelligence_prices = prices[intelligence_ticker]
+    else:
+        with st.spinner("Loading company price history..."):
+            intelligence_prices = download_prices([intelligence_ticker], period="1y").get(intelligence_ticker)
+
+    forecast_frame = build_trend_forecast(intelligence_prices)
+    if forecast_frame is None:
+        st.info("There is not enough price history to produce this market view.")
+    else:
+        historical_series = forecast_frame[forecast_frame["Series"] == "Historical close"]
+        forecast_series = forecast_frame[forecast_frame["Series"] == "Trend forecast"]
+        latest_close = historical_series["Price"].iloc[-1]
+        forecast_close = forecast_series["Price"].iloc[-1]
+        forecast_change = (forecast_close / latest_close - 1) * 100 if latest_close else 0
+        outlook_metrics = st.columns(3)
+        outlook_metrics[0].metric("Latest close", f"{latest_close:,.2f} GBp")
+        outlook_metrics[1].metric("30-day trend", f"{forecast_close:,.2f} GBp", f"{forecast_change:+.1f}%")
+        outlook_metrics[2].metric("Forecast window", "30 trading days")
+
+        outlook_figure = px.line(
+            forecast_frame,
+            x="Date",
+            y="Price",
+            color="Series",
+            title=f"{intelligence_ticker} historical close and trend projection",
+            color_discrete_map={"Historical close": "#4f8fd8", "Trend forecast": "#e09f3e"},
+        )
+        outlook_figure.update_traces(line_width=2.5)
+        outlook_figure.update_traces(
+            selector=dict(name="Trend forecast"),
+            line=dict(dash="dash", width=3),
+        )
+        outlook_figure.update_layout(
+            margin=dict(l=20, r=20, t=55, b=20),
+            paper_bgcolor="rgba(0,0,0,0)",
+            xaxis_title=None,
+            yaxis_title="Price (GBp)",
+            legend_title_text=None,
+            hovermode="x unified",
+        )
+        st.plotly_chart(outlook_figure, use_container_width=True)
+        st.caption(
+            "The dashed line is a simple linear trend based on up to 90 recent closes. "
+            "It is an illustration, not a price target or financial advice. Headlines are supplied by Yahoo Finance."
+        )
+
+st.divider()
 st.markdown('<div class="section-kicker">Portfolio overview</div>', unsafe_allow_html=True)
 st.subheader("Summary")
 summary_columns = st.columns(5)
@@ -593,6 +764,9 @@ summary_columns[4].metric(
     f"{portfolio_return:.1f}%" if portfolio_return is not None else "N/A",
     help="The estimated change in value across the selected price-history period, assuming today’s share quantities were held throughout. It covers the whole portfolio and excludes fees, taxes, dividends, and currency effects.",
 )
+
+with st.expander("Portfolio · Current portfolio input"):
+    st.dataframe(number_rows_from_one(df), use_container_width=True)
 
 with st.expander("How to read the portfolio summary"):
     st.markdown(
